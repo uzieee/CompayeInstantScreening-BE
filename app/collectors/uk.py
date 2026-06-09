@@ -19,27 +19,35 @@ def collect(db: Session) -> dict:
     except Exception as e:
         return {"error": str(e)}
 
-    reader = csv.DictReader(io.StringIO(content))
+    # Row 0 is metadata ("Last Updated,..."), row 1 is the real CSV header
+    lines = content.splitlines()
+    header_idx = next((i for i, l in enumerate(lines[:5]) if "Name 6" in l or "GroupID" in l), 1)
+    reader = csv.DictReader(io.StringIO("\n".join(lines[header_idx:])))
     count = 0
     seen_uids: set = set()
 
     for row in reader:
-        uid = row.get("GroupID") or row.get("UniqueID") or ""
+        uid = (row.get("GroupID") or row.get("Group ID") or row.get("UniqueID") or "").strip()
         if not uid:
             continue
 
-        full_name = row.get("Name 6") or row.get("Name1") or ""
+        full_name = (row.get("Name 6") or "").strip()
         if not full_name:
-            parts = [row.get(f"Name {i}", "") for i in range(1, 6)]
-            full_name = " ".join(p for p in parts if p).strip()
+            parts = [(row.get(f"Name {i}") or "").strip() for i in range(1, 6)]
+            full_name = " ".join(p for p in parts if p)
 
-        etype = (row.get("Group Type") or "entity").lower()
-        country = row.get("Country") or row.get("Nationality") or ""
-        dob = row.get("DOB") or ""
-        program = row.get("Regime") or "UK Financial Sanctions"
+        etype = (row.get("Group Type") or row.get("Entity Type") or "entity").lower()
+        if "individual" in etype or "person" in etype:
+            etype = "individual"
+        elif "vessel" in etype or "ship" in etype:
+            etype = "vessel"
+        else:
+            etype = "entity"
 
-        # Collect aliases per group id
-        alias = row.get("AliasName") or row.get("Alias") or ""
+        country = (row.get("Country") or row.get("Nationality") or "").strip()
+        dob = (row.get("DOB") or row.get("Date of Birth") or "").strip()
+        program = (row.get("Regime") or "UK Financial Sanctions").strip()
+        alias = (row.get("AliasName") or row.get("Alias") or row.get("Alias Name") or "").strip()
         aliases = [alias] if alias else []
 
         raw = json.dumps({"uid": uid, "name": full_name, "regime": program})
@@ -52,13 +60,19 @@ def collect(db: Session) -> dict:
             continue
 
         seen_uids.add(uid)
+        if not full_name:
+            continue
+        # Truncate to column limits
+        full_name = full_name[:500]
+        country   = (country or "")[:200]
+        dob       = (dob or "")[:50]
+        program   = (program or "")[:500]
+
         existing = db.query(SanctionedEntity).filter_by(source="UK", source_id=uid).first()
         if existing:
             existing.name = normalize_name(full_name)
             existing.name_original = full_name
         else:
-            if not full_name:
-                continue
             db.add(SanctionedEntity(
                 source="UK", source_id=uid, entity_type=etype,
                 name=normalize_name(full_name), name_original=full_name,
@@ -67,5 +81,9 @@ def collect(db: Session) -> dict:
             ))
         count += 1
 
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        return {"error": f"Commit failed: {e}"}
     return {"total": count}

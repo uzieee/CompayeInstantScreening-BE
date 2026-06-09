@@ -6,8 +6,8 @@ from sqlalchemy.orm import Session
 from app.models.sanctions import SanctionedEntity
 from app.collectors.base import normalize_name, HEADERS
 
-EU_URL = "https://webgate.ec.europa.eu/fsd/fsf/public/files/xmlFullSanctionsList_1_1/content"
-EU_ALT = "https://data.europa.eu/api/hub/repo/datasets/consolidated-list-of-persons-groups-and-entities-subject-to-eu-financial-sanctions.xml"
+EU_URL = "https://webgate.ec.europa.eu/fsd/fsf/public/files/xmlFullSanctionsList_1_1/content?token=dG9rZW4tMjAxNw"
+EU_ALT = "https://webgate.ec.europa.eu/fsd/fsf/public/files/xmlFullSanctionsList_1_1/content"
 
 
 def collect(db: Session) -> dict:
@@ -30,19 +30,21 @@ def collect(db: Session) -> dict:
         return {"error": f"XML parse error: {e}"}
 
     count = 0
-    # EU XML uses both sanctionEntity and subjectType
-    for entry in list(root.iter("sanctionEntity")) or list(root.iter("entity")):
-        uid = entry.get("euReferenceNumber") or entry.get("id") or ""
+    NS = "http://eu.europa.ec/fpi/fsd/export"
+    for entry in list(root.iter(f"{{{NS}}}sanctionEntity")) or list(root.iter("sanctionEntity")):
+        uid = entry.get("euReferenceNumber") or entry.get("logicalId") or ""
         etype = (entry.get("subjectType") or "entity").lower()
+        if etype not in ("individual", "entity", "vessel"):
+            etype = "entity"
 
-        # Name
+        # Name — handle both namespaced and non-namespaced
         name_parts = []
-        for nm in entry.iter("nameAlias"):
+        for nm in list(entry.iter(f"{{{NS}}}nameAlias")) or list(entry.iter("nameAlias")):
             whole = nm.get("wholeName") or ""
             first = nm.get("firstName") or ""; last = nm.get("lastName") or ""
             n = whole or f"{first} {last}".strip()
             if n:
-                name_parts.append(n)
+                name_parts.append(n[:500])
 
         full_name = name_parts[0] if name_parts else ""
         aliases   = name_parts[1:] if len(name_parts) > 1 else []
@@ -52,8 +54,8 @@ def collect(db: Session) -> dict:
 
         # Country
         country = ""
-        for addr in entry.iter("address"):
-            country = addr.get("countryIso2Code") or addr.get("countryDescription") or ""; break
+        for addr in list(entry.iter(f"{{{NS}}}address")) or list(entry.iter("address")):
+            country = (addr.get("countryIso2Code") or addr.get("countryDescription") or "")[:200]; break
 
         program = "EU Financial Sanctions"
         raw = json.dumps({"uid": uid, "name": full_name, "type": etype})

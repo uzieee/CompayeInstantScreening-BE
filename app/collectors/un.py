@@ -69,7 +69,11 @@ def collect(db: Session) -> dict:
                 raw=json.dumps({"uid": uid, "name": full_name}))
         count += 1
 
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        return {"error": f"Commit failed: {e}"}
     return {"total": count}
 
 
@@ -77,6 +81,12 @@ def _upsert(db, source, uid, etype, full_name, aliases,
             nationality="", dob="", program="", raw=""):
     if not full_name:
         return
+    # Truncate fields to safe lengths
+    nationality = (nationality or "")[:200]
+    dob = (dob or "")[:50]
+    program = (program or "")[:500]
+    full_name = (full_name or "")[:500]
+
     existing = db.query(SanctionedEntity).filter_by(source=source, source_id=uid).first()
     if existing:
         existing.name = normalize_name(full_name)

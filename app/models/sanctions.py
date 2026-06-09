@@ -20,16 +20,16 @@ class SanctionedEntity(Base):
     # Aliases stored as PostgreSQL array for fast lookups
     aliases = Column(ARRAY(String), nullable=True, default=[])
 
-    nationality = Column(String(10), nullable=True)
-    country = Column(String(10), nullable=True)
+    nationality = Column(String(200), nullable=True)
+    country = Column(String(200), nullable=True)
     date_of_birth = Column(String(50), nullable=True)
     place_of_birth = Column(String(200), nullable=True)
     passport_number = Column(String(100), nullable=True)
     national_id = Column(String(100), nullable=True)
 
     # Vessel-specific
-    vessel_flag = Column(String(10), nullable=True)
-    vessel_imo = Column(String(20), nullable=True)
+    vessel_flag = Column(String(50), nullable=True)
+    vessel_imo = Column(String(50), nullable=True)
     vessel_type = Column(String(100), nullable=True)
 
     program = Column(String(500), nullable=True)   # sanction programme name
