@@ -5,12 +5,14 @@ from contextlib import asynccontextmanager
 from app.config import settings
 from app.database import engine, Base
 
-# Import models so SQLAlchemy registers them before create_all
-import app.models.tenant  # noqa: F401
-import app.models.user    # noqa: F401
-import app.models.audit   # noqa: F401
+# Register all models before create_all
+import app.models.tenant    # noqa
+import app.models.user      # noqa
+import app.models.audit     # noqa
+import app.models.sanctions # noqa
+import app.models.screening # noqa
 
-from app.routers import auth, dashboard
+from app.routers import auth, dashboard, screening, audit, collector, users
 
 
 @asynccontextmanager
@@ -46,8 +48,13 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
-app.include_router(auth.router, prefix="/api/v1")
-app.include_router(dashboard.router, prefix="/api/v1")
+PREFIX = "/api/v1"
+app.include_router(auth.router,       prefix=PREFIX)
+app.include_router(dashboard.router,  prefix=PREFIX)
+app.include_router(screening.router,  prefix=PREFIX)
+app.include_router(audit.router,      prefix=PREFIX)
+app.include_router(collector.router,  prefix=PREFIX)
+app.include_router(users.router,      prefix=PREFIX)
 
 
 @app.get("/api/health")
