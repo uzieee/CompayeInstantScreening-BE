@@ -16,7 +16,7 @@ class RegisterRequest(BaseModel):
 
 
 class TokenResponse(BaseModel):
-    access_token: str
+    access_token: Optional[str] = None
     token_type: str = "bearer"
     requires_2fa: bool = False
     temp_token: Optional[str] = None

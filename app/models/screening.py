@@ -29,7 +29,7 @@ class ScreeningSession(Base):
 
     mode = Column(String(20), default="single")  # single / batch
     query_name = Column(String(500), nullable=False)
-    query_country = Column(String(10), nullable=True)
+    query_country = Column(String(200), nullable=True)
     query_type = Column(String(30), nullable=True)     # individual / entity / vessel
     query_dob  = Column(String(50),  nullable=True)
 
@@ -60,7 +60,7 @@ class ScreeningResult(Base):
     matched_name    = Column(String(500), nullable=True)
     matched_source  = Column(String(20),  nullable=True)
     matched_type    = Column(String(20),  nullable=True)
-    matched_country = Column(String(10),  nullable=True)
+    matched_country = Column(String(200), nullable=True)
     matched_program = Column(String(500), nullable=True)
     match_detail    = Column(JSONB, nullable=True)  # full entity snapshot
 

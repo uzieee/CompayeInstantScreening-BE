@@ -8,6 +8,7 @@ from rapidfuzz import process, fuzz
 from app.models.sanctions import SanctionedEntity
 from app.models.screening import ScreeningSession, ScreeningResult, MatchResult, ScreeningStatus
 from app.models.audit import AuditLog, AuditAction
+from app.models.tenant import Tenant
 from app.collectors.base import normalize_name
 
 # Score thresholds
@@ -156,6 +157,11 @@ def screen_entity(
         ip_address=ip_address,
         details={"session_id": str(session.id), "sources": sources, "score_top": round(matches[0][1], 1) if matches else 0},
     ))
+
+    # Increment tenant quota usage
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if tenant:
+        tenant.searches_used = (tenant.searches_used or 0) + 1
 
     db.commit()
     db.refresh(session)
