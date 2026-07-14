@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     EMAIL_FROM: str = "noreply@complayeconsulting.com"
 
     # CORS
-    CORS_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost:3000"]
+    CORS_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost:3000", "https://frontend-production-d475.up.railway.app"]
 
     class Config:
         env_file = ".env"
