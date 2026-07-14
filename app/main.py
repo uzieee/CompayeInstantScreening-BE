@@ -17,7 +17,9 @@ from app.routers import auth, dashboard, screening, audit, collector, users
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    Base.metadata.create_all(bind=engine)
+    import asyncio
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, lambda: Base.metadata.create_all(bind=engine))
     yield
 
 
