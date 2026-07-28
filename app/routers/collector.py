@@ -30,15 +30,24 @@ def _run_all(db: Session):
     return results
 
 
+def _run_all_background():
+    """Background-safe version that creates its own DB session."""
+    from app.database import SessionLocal
+    db = SessionLocal()
+    try:
+        _run_all(db)
+    finally:
+        db.close()
+
+
 @router.post("/run")
 def trigger_collection(
     background_tasks: BackgroundTasks,
     source: str = "all",
-    db: Session = Depends(get_db),
     current_user: User = Depends(require_roles("super_admin", "tenant_admin")),
 ):
     """Trigger sanctions list download in the background."""
-    background_tasks.add_task(_run_all, db)
+    background_tasks.add_task(_run_all_background)
     return {"message": "Collection started in background", "source": source}
 
 
