@@ -52,7 +52,7 @@ Write a professional risk narrative that:
 3. Notes which sanctions lists were checked
 4. Recommends a clear next action (e.g. "no further action required", "escalate for enhanced due diligence", "block transaction pending review")
 
-Do not use bullet points. Write in flowing paragraphs. Be direct and professional."""
+IMPORTANT: Output plain text only. No markdown, no headers, no asterisks, no bullet points. Write in 3-4 flowing sentences. Be direct and professional."""
 
     try:
         response = httpx.post(
