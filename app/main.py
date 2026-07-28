@@ -32,9 +32,20 @@ def _run_migrations():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     import asyncio
+    from apscheduler.schedulers.background import BackgroundScheduler
+    from apscheduler.triggers.cron import CronTrigger
+    from app.routers.collector import _run_all_background
+
     loop = asyncio.get_event_loop()
     await loop.run_in_executor(None, _run_migrations)
+
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(_run_all_background, CronTrigger(hour=0, minute=0), id="daily_sanctions_sync")
+    scheduler.start()
+
     yield
+
+    scheduler.shutdown(wait=False)
 
 
 app = FastAPI(
