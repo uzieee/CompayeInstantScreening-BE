@@ -39,6 +39,7 @@ class ScreeningSession(Base):
     possible_count= Column(Integer, default=0)
 
     sources_checked = Column(JSONB, nullable=True)  # ["OFAC","EU","UN",...]
+    ai_narrative = Column(Text, nullable=True)       # Claude-generated risk narrative
     completed_at = Column(DateTime, nullable=True)
     created_at   = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
 

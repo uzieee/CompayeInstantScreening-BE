@@ -33,6 +33,7 @@ class ScreenResponse(BaseModel):
     overall_result: str
     results: list
     sources_checked: list
+    ai_narrative: Optional[str] = None
 
 
 @router.post("", response_model=ScreenResponse)
@@ -166,6 +167,7 @@ def _session_to_response(s: ScreeningSession) -> dict:
         "overall_result": overall,
         "results": sorted(results, key=lambda x: -x["score"]),
         "sources_checked": s.sources_checked or [],
+        "ai_narrative": s.ai_narrative or "",
         "created_at": s.created_at.isoformat() if s.created_at else None,
     }
 

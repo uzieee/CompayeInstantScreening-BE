@@ -15,11 +15,25 @@ import app.models.screening # noqa
 from app.routers import auth, dashboard, screening, audit, collector, users
 
 
+def _run_migrations():
+    Base.metadata.create_all(bind=engine)
+    # Add columns that create_all won't add to existing tables
+    with engine.connect() as conn:
+        for sql in [
+            "ALTER TABLE screening_sessions ADD COLUMN IF NOT EXISTS ai_narrative TEXT",
+        ]:
+            try:
+                conn.execute(__import__("sqlalchemy").text(sql))
+                conn.commit()
+            except Exception:
+                pass
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     import asyncio
     loop = asyncio.get_event_loop()
-    await loop.run_in_executor(None, lambda: Base.metadata.create_all(bind=engine))
+    await loop.run_in_executor(None, _run_migrations)
     yield
 
 

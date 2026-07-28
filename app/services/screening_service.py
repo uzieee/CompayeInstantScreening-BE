@@ -10,6 +10,7 @@ from app.models.screening import ScreeningSession, ScreeningResult, MatchResult,
 from app.models.audit import AuditLog, AuditAction
 from app.models.tenant import Tenant
 from app.collectors.base import normalize_name
+from app.services.ai_service import generate_risk_narrative
 
 # Score thresholds
 HIT_THRESHOLD      = 88
@@ -146,6 +147,29 @@ def screen_entity(
         audit_result = "possible_match"
     else:
         audit_result = "clear"
+
+    # AI risk narrative
+    top_matches = [
+        {
+            "name": r.matched_name,
+            "source": r.matched_source,
+            "score": r.score,
+            "result": r.match_result.value,
+            "program": r.matched_program,
+            "country": r.matched_country,
+        }
+        for r in sorted(results_created, key=lambda x: -x.score)
+    ]
+    session.ai_narrative = generate_risk_narrative(
+        query_name=query_name,
+        overall_result=audit_result,
+        hit_count=hit_count,
+        possible_count=possible_count,
+        sources_checked=sources,
+        top_matches=top_matches,
+        query_country=query_country,
+        query_type=query_type,
+    )
 
     # Audit log
     db.add(AuditLog(
