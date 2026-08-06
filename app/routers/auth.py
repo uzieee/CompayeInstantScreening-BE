@@ -9,6 +9,7 @@ from app.schemas.auth import (
 from app.services import auth_service
 from app.routers.deps import get_current_user
 from app.models.user import User
+from app.models.audit import AuditLog, AuditAction
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -20,8 +21,19 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(data: LoginRequest, db: Session = Depends(get_db)):
+def login(data: LoginRequest, request: Request, db: Session = Depends(get_db)):
     result = auth_service.login(db, data.email, data.password)
+    # Log the login event for TC-RPT-04/06
+    from app.models.user import User
+    user = db.query(User).filter(User.email == data.email).first()
+    if user:
+        db.add(AuditLog(
+            tenant_id=user.tenant_id,
+            user_id=user.id,
+            action=AuditAction.login,
+            ip_address=request.client.host if request.client else None,
+        ))
+        db.commit()
     return result
 
 
