@@ -25,6 +25,15 @@ def _classify(score: float) -> MatchResult:
     return MatchResult.clear
 
 
+def _composite_score(query: str, name: str) -> float:
+    """Weighted composite of 4 RapidFuzz algorithms (TC-SCR-08)."""
+    w  = fuzz.WRatio(query, name)
+    ts = fuzz.token_sort_ratio(query, name)
+    te = fuzz.token_set_ratio(query, name)
+    p  = fuzz.partial_ratio(query, name)
+    return w * 0.40 + ts * 0.25 + te * 0.25 + p * 0.10
+
+
 def screen_entity(
     db: Session,
     tenant_id: str,
@@ -72,24 +81,52 @@ def screen_entity(
 
     all_names = list(name_map.keys())
 
-    # Run fuzzy match — top 20 candidates
-    matches = process.extract(
+    # Pre-filter with WRatio to top 50 candidates, then apply composite scoring (TC-SCR-08)
+    prefilter = process.extract(
         norm_query,
         all_names,
         scorer=fuzz.WRatio,
-        limit=20,
+        limit=50,
     ) if all_names else []
 
-    # Deduplicate by entity id, keep highest score
+    # Deduplicate by entity id, keep highest composite score
     best: dict[str, tuple] = {}
-    for name, score, _ in matches:
+    for name, _, _ in prefilter:
+        score = _composite_score(norm_query, name)
         eid = name_map[name]
         if eid not in best or score > best[eid][1]:
             best[eid] = (name, score)
 
+    # Apply DOB and country score adjustments (TC-SCR-05, TC-SCR-06)
+    entity_cache_pre: dict[str, SanctionedEntity] = {str(e.id): e for e in entities}
+    adjusted_best: dict[str, tuple] = {}
+    for eid, (matched_name, score) in best.items():
+        entity = entity_cache_pre.get(eid)
+        if entity:
+            # DOB adjustment (TC-SCR-05): boost if match, penalise if mismatch
+            if query_dob and entity.date_of_birth:
+                try:
+                    q_year = str(query_dob)[:4]
+                    e_year = str(entity.date_of_birth)[:4]
+                    if q_year == e_year:
+                        score = min(100.0, score + 5)
+                    else:
+                        score = max(0.0, score - 8)
+                except Exception:
+                    pass
+            # Country adjustment (TC-SCR-06): penalise if country mismatch
+            if query_country and (entity.country or entity.nationality):
+                qc = query_country.strip().upper()[:2]
+                ec = ((entity.country or entity.nationality) or "").strip().upper()[:2]
+                if ec and qc != ec:
+                    score = max(0.0, score - 10)
+        adjusted_best[eid] = (matched_name, score)
+
+    best = adjusted_best
+
     # Create result rows for anything above possible threshold
     hit_count = possible_count = 0
-    entity_cache: dict[str, SanctionedEntity] = {str(e.id): e for e in entities}
+    entity_cache: dict[str, SanctionedEntity] = entity_cache_pre
 
     results_created = []
     for eid, (matched_name, score) in sorted(best.items(), key=lambda x: -x[1][1]):
@@ -179,7 +216,7 @@ def screen_entity(
         entity_name=query_name,
         result=audit_result,
         ip_address=ip_address,
-        details={"session_id": str(session.id), "sources": sources, "score_top": round(matches[0][1], 1) if matches else 0},
+        details={"session_id": str(session.id), "sources": sources, "score_top": round(prefilter[0][1], 1) if prefilter else 0},
     ))
 
     # Increment tenant quota usage

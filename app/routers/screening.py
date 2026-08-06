@@ -10,7 +10,7 @@ from app.routers.deps import get_current_user
 from app.models.user import User
 from app.models.screening import ScreeningSession, ScreeningResult, ComplianceReport
 from app.services import screening_service
-from app.services.report_service import generate_pdf_report
+from app.services.report_service import generate_pdf_report, send_report_email
 
 router = APIRouter(prefix="/screening", tags=["screening"])
 
@@ -64,16 +64,31 @@ async def screen_batch(
     current_user: User = Depends(get_current_user),
 ):
     content = await file.read()
-    text = content.decode("utf-8-sig")
-    reader = csv.DictReader(io.StringIO(text))
+    rows: list[dict] = []
+
+    filename = (file.filename or "").lower()
+    if filename.endswith(".xlsx") or filename.endswith(".xls"):
+        try:
+            import openpyxl
+            wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+            ws = wb.active
+            headers = [str(c.value or "").strip().lower() for c in next(ws.iter_rows(min_row=1, max_row=1))]
+            for row in ws.iter_rows(min_row=2, values_only=True):
+                rows.append({headers[i]: (str(v).strip() if v is not None else "") for i, v in enumerate(row)})
+        except ImportError:
+            raise HTTPException(400, "openpyxl not installed — XLSX not supported on this server")
+    else:
+        text = content.decode("utf-8-sig")
+        reader = csv.DictReader(io.StringIO(text))
+        rows = [{k.lower(): v for k, v in r.items()} for r in reader]
 
     sessions = []
-    for row in reader:
-        name = row.get("name") or row.get("Name") or row.get("entity") or ""
+    for row in rows:
+        name = row.get("name") or row.get("entity") or ""
         if not name.strip():
             continue
-        country = row.get("country") or row.get("Country") or None
-        etype   = row.get("type")    or row.get("Type")    or None
+        country = row.get("country") or None
+        etype   = row.get("type") or None
         s = screening_service.screen_entity(
             db=db,
             tenant_id=str(current_user.tenant_id),
@@ -86,6 +101,30 @@ async def screen_batch(
         sessions.append(_session_to_response(s))
 
     return {"total": len(sessions), "sessions": sessions}
+
+
+class EmailReportRequest(BaseModel):
+    recipient: str
+
+
+@router.post("/{session_id}/report/email")
+async def email_report(
+    session_id: str,
+    req: EmailReportRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    s = db.query(ScreeningSession).filter_by(id=session_id, tenant_id=current_user.tenant_id).first()
+    if not s:
+        raise HTTPException(404, "Session not found")
+    pdf_bytes = generate_pdf_report(s, current_user)
+    await send_report_email(
+        to=req.recipient,
+        session=s,
+        pdf_bytes=pdf_bytes,
+        sender_name=current_user.full_name,
+    )
+    return {"status": "sent", "recipient": req.recipient}
 
 
 @router.get("/history")

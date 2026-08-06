@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from app.database import get_db
 from app.routers.deps import get_current_user
 from app.models.user import User
-from app.models.audit import AuditLog
+from app.models.audit import AuditLog, AuditAction
 
 router = APIRouter(prefix="/audit", tags=["audit"])
 
@@ -37,3 +38,39 @@ def list_audit_logs(
             for l in logs
         ],
     }
+
+
+@router.get("/connection-report")
+def connection_report(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """TC-RPT-06: User connection (login) activity report."""
+    rows = (
+        db.query(
+            AuditLog.user_id,
+            func.count(AuditLog.id).label("login_count"),
+            func.min(AuditLog.created_at).label("first_login"),
+            func.max(AuditLog.created_at).label("last_login"),
+        )
+        .filter(
+            AuditLog.tenant_id == current_user.tenant_id,
+            AuditLog.action == AuditAction.login,
+        )
+        .group_by(AuditLog.user_id)
+        .all()
+    )
+
+    report = []
+    for row in rows:
+        user = db.query(User).filter(User.id == row.user_id).first()
+        report.append({
+            "user_id": str(row.user_id) if row.user_id else None,
+            "user_name": user.full_name if user else "Unknown",
+            "user_email": user.email if user else "",
+            "login_count": row.login_count,
+            "first_login": row.first_login.isoformat() if row.first_login else None,
+            "last_login": row.last_login.isoformat() if row.last_login else None,
+        })
+
+    return {"total_users": len(report), "report": sorted(report, key=lambda x: -(x["login_count"] or 0))}

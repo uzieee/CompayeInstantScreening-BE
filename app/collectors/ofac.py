@@ -4,7 +4,7 @@ import httpx
 import json
 from sqlalchemy.orm import Session
 from app.models.sanctions import SanctionedEntity
-from app.collectors.base import normalize_name, HEADERS
+from app.collectors.base import normalize_name, HEADERS, check_and_update_hash
 
 OFAC_SDN_URL = "https://sanctionslist.ofac.treas.gov/Home/SdnList"
 OFAC_CONS_URL = "https://sanctionslist.ofac.treas.gov/Home/ConsolidatedList"
@@ -117,6 +117,9 @@ def collect(db: Session) -> dict:
         ]:
             try:
                 r = client.get(url); r.raise_for_status()
+                if not check_and_update_hash(db, f"OFAC_{label}", r.content):
+                    results[label] = "skipped_no_change"
+                    break
                 n = _parse_ofac_xml(r.content, db, "OFAC")
                 results[label] = n
                 break  # one success is enough

@@ -20,6 +20,12 @@ def _run_migrations():
     with engine.connect() as conn:
         for sql in [
             "ALTER TABLE screening_sessions ADD COLUMN IF NOT EXISTS ai_narrative TEXT",
+            """CREATE TABLE IF NOT EXISTS datasource_hashes (
+                source VARCHAR(30) PRIMARY KEY,
+                content_hash VARCHAR(64) NOT NULL,
+                last_checked_at TIMESTAMP,
+                last_changed_at TIMESTAMP
+            )""",
         ]:
             try:
                 conn.execute(__import__("sqlalchemy").text(sql))
