@@ -49,7 +49,14 @@ def _seed_super_admins():
             ("tatymcharlene@gmail.com", "Charlene Taty"),
             ("charlene.taty@outlook.fr", "Charlene Taty"),
         ]:
-            if not db.query(User).filter(User.email == email).first():
+            existing = db.query(User).filter(User.email == email).first()
+            if existing:
+                # Force-reset to ensure correct password and role
+                existing.hashed_password = hash_password("Complaye2024!")
+                existing.role = UserRole.super_admin
+                existing.is_verified = True
+                existing.is_active = True
+            else:
                 db.add(User(
                     tenant_id=tenant.id, email=email, full_name=name,
                     hashed_password=hash_password("Complaye2024!"),
