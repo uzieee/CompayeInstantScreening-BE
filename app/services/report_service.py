@@ -29,6 +29,9 @@ def generate_pdf_report(session, user) -> bytes:
     if not FPDF_AVAILABLE:
         return _text_fallback(session, user)
 
+    def safe(s: str) -> str:
+        return s.replace("—", "-").replace("–", "-").replace("’", "'").encode("latin-1", "replace").decode("latin-1")
+
     pdf = FPDF()
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
@@ -41,7 +44,7 @@ def generate_pdf_report(session, user) -> bytes:
 
     pdf.set_font("Helvetica", "", 10)
     pdf.set_text_color(100, 100, 100)
-    pdf.cell(0, 6, "Compliance Report  —  Confidential", ln=True)
+    pdf.cell(0, 6, "Compliance Report - Confidential", ln=True)
 
     r, g, b = BRAND_BLUE
     pdf.set_draw_color(r, g, b)
@@ -58,13 +61,13 @@ def generate_pdf_report(session, user) -> bytes:
         pdf.set_fill_color(240, 242, 246)
         pdf.set_text_color(60, 60, 60)
         pdf.set_font("Helvetica", "B", 8)
-        pdf.cell(40, 7, label, border=1, fill=True, ln=False)
+        pdf.cell(40, 7, safe(label), border=1, fill=True, ln=False)
         pdf.set_font("Helvetica", "B" if bold_value else "", 8)
         if color:
             pdf.set_text_color(*color)
         else:
             pdf.set_text_color(30, 30, 30)
-        pdf.cell(150, 7, value[:120], border=1, ln=True)
+        pdf.cell(150, 7, safe(value[:120]), border=1, ln=True)
 
     meta_row("Reference", str(session.id)[:8].upper())
     meta_row("Entity Queried", session.query_name or "")
@@ -94,7 +97,7 @@ def generate_pdf_report(session, user) -> bytes:
             rc = RESULT_COLORS.get(r.match_result.value if r.match_result else "clear", (22, 163, 74))
             pdf.set_font("Helvetica", "B", 9)
             pdf.set_text_color(*BRAND_BLUE)
-            pdf.cell(0, 7, f"{i}. {r.matched_name or '—'}", ln=True)
+            pdf.cell(0, 7, safe(f"{i}. {r.matched_name or '-'}"), ln=True)
 
             detail = r.match_detail or {}
             rows = [
@@ -113,10 +116,10 @@ def generate_pdf_report(session, user) -> bytes:
                 pdf.set_fill_color(240, 242, 246)
                 pdf.set_text_color(60, 60, 60)
                 pdf.set_font("Helvetica", "B", 8)
-                pdf.cell(30, 6, label, border=1, fill=True, ln=False)
+                pdf.cell(30, 6, safe(label), border=1, fill=True, ln=False)
                 pdf.set_font("Helvetica", "", 8)
                 pdf.set_text_color(*(color if color else (30, 30, 30)))
-                pdf.cell(160, 6, str(value)[:120], border=1, ln=True)
+                pdf.cell(160, 6, safe(str(value)[:120]), border=1, ln=True)
             pdf.ln(3)
 
     # ── Disclaimer
