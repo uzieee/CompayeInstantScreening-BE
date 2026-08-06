@@ -12,12 +12,11 @@ import app.models.audit     # noqa
 import app.models.sanctions # noqa
 import app.models.screening # noqa
 
-from app.routers import auth, dashboard, screening, audit, collector, users
+from app.routers import auth, dashboard, screening, audit, collector, users, admin
 
 
 def _run_migrations():
     Base.metadata.create_all(bind=engine)
-    # Add columns that create_all won't add to existing tables
     with engine.connect() as conn:
         for sql in [
             "ALTER TABLE screening_sessions ADD COLUMN IF NOT EXISTS ai_narrative TEXT",
@@ -27,6 +26,40 @@ def _run_migrations():
                 conn.commit()
             except Exception:
                 pass
+    _seed_super_admins()
+
+
+def _seed_super_admins():
+    """Create Complaye Consulting tenant and super admin accounts if not present."""
+    from app.database import SessionLocal
+    from app.models.tenant import Tenant
+    from app.models.user import User, UserRole
+    from app.utils.security import hash_password
+    db = SessionLocal()
+    try:
+        # Ensure Complaye Consulting tenant exists
+        tenant = db.query(Tenant).filter(Tenant.slug == "complaye-consulting").first()
+        if not tenant:
+            tenant = Tenant(name="Complaye Consulting", slug="complaye-consulting",
+                            country="BE", plan="enterprise", search_quota=999999)
+            db.add(tenant)
+            db.flush()
+
+        for email, name in [
+            ("tatymcharlene@gmail.com", "Charlene Taty"),
+            ("charlene.taty@outlook.fr", "Charlene Taty"),
+        ]:
+            if not db.query(User).filter(User.email == email).first():
+                db.add(User(
+                    tenant_id=tenant.id, email=email, full_name=name,
+                    hashed_password=hash_password("Complaye2024!"),
+                    role=UserRole.super_admin, is_verified=True, is_active=True,
+                ))
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
 
 
 @asynccontextmanager
@@ -82,6 +115,7 @@ app.include_router(screening.router,  prefix=PREFIX)
 app.include_router(audit.router,      prefix=PREFIX)
 app.include_router(collector.router,  prefix=PREFIX)
 app.include_router(users.router,      prefix=PREFIX)
+app.include_router(admin.router,      prefix=PREFIX)
 
 
 @app.get("/api/health")
